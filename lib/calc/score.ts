@@ -6,6 +6,7 @@ export interface ScoreSubs {
   foerderquote: number;
   steuerOptimierung: number;
   flexibilitaet: number;
+  liquidPuffer: number;
 }
 
 export interface ScoreResult {
@@ -15,14 +16,15 @@ export interface ScoreResult {
 }
 
 /**
- * Berechnet den Vorsorge-Score (0..100) aus 5 gleichgewichteten Sub-Scores.
+ * Berechnet den Vorsorge-Score (0..100) aus 6 gleichgewichteten Sub-Scores.
  *
- * Briefing §5:
- * - Sparquote (in % vom Einkommen)
- * - BU-Schutz (binär ja/nein → 95/15)
+ * Briefing §5 + Phase-2-Erweiterung:
+ * - Sparquote (% vom Einkommen)
+ * - BU-Schutz (ja+Höhe / nein)
  * - Förderquote (genutzt vs. nicht)
  * - Steueroptimierung (ja/nein)
- * - Flexibilität (3. Schicht vorhanden ja/nein)
+ * - Flexibilität (3. Schicht ja/nein)
+ * - Liquider Puffer (Notgroschen in Monatsnettos)
  *
  * Score-Skala bewusst grob, weil sie einen Gesprächsanker bildet,
  * keine prädiktive Kennzahl.
@@ -35,14 +37,26 @@ export function calcScore(daten: BeratungDaten): ScoreResult {
   // Sparquote: 0 % → 0 Punkte, 15 %+ → 100 Punkte (linear).
   const sparquoteScore = Math.min(100, Math.round((sparQuote / 0.15) * 100));
 
-  // BU binär: ja → 95, nein → 15.
-  // Nicht 100/0, weil "hat BU" allein keine vollständige Absicherung garantiert
-  // und "keine BU" mit Erspartem nicht totaler Ausfall ist.
-  const buScore = daten.hatBU ? 95 : 15;
+  // BU: nach Höhe und Vorhandensein.
+  // Empfehlung: ≥ 80 % vom Nettoeinkommen. Skalierung:
+  //   keine BU → 15, BU mit ≥ 1500 € → 95, dazwischen linear.
+  const buScore = daten.bestehendeBU.hat
+    ? Math.min(95, 50 + Math.round((daten.bestehendeBU.monatsRente / 1500) * 45))
+    : 15;
 
   const foerderScore = daten.nutztFoerderungen ? 90 : 20;
   const steuerScore = daten.steueroptimiert ? 90 : 25;
   const flexScore = daten.hatFlexibleVorsorge ? 90 : 30;
+
+  // Liquid-Puffer: < 1 Monat → 10, 3-5 Monate → 70, ≥ 6 Monate → 100.
+  const liquidScore =
+    daten.notgroschenMonate >= 6
+      ? 100
+      : daten.notgroschenMonate >= 3
+        ? 70
+        : daten.notgroschenMonate >= 1
+          ? 40
+          : 10;
 
   const subs: ScoreSubs = {
     sparquote: sparquoteScore,
@@ -50,6 +64,7 @@ export function calcScore(daten: BeratungDaten): ScoreResult {
     foerderquote: foerderScore,
     steuerOptimierung: steuerScore,
     flexibilitaet: flexScore,
+    liquidPuffer: liquidScore,
   };
 
   const total = Math.round(
@@ -57,8 +72,9 @@ export function calcScore(daten: BeratungDaten): ScoreResult {
       subs.buSchutz +
       subs.foerderquote +
       subs.steuerOptimierung +
-      subs.flexibilitaet) /
-      5,
+      subs.flexibilitaet +
+      subs.liquidPuffer) /
+      6,
   );
 
   return { total, subs };
