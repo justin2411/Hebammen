@@ -6,3 +6,4 @@ export * from './ruerup';
 export * from './bu';
 export * from './score';
 export * from './empfehlungen';
+export * from './aggregate';

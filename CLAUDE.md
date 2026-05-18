@@ -139,9 +139,14 @@ create policy "berater_sieht_eigene" on beratungen
   for all using (auth.uid() = berater_id);
 ```
 
-### `beratungen.daten` JSONB-Schema
+### `beratungen.daten` JSONB-Schema (schemaVersion 2)
 ```typescript
+type SubProfil = 'klinik' | 'wochenbett' | 'geburtshilfe' | 'beleg' | 'praxis';
+
 interface BeratungDaten {
+  // Sub-Profil – Schnellstart mit Berufs-typischen Defaults
+  subProfil: SubProfil;
+
   // Persönliches
   alter: number;
   status: 'angestellt' | 'freiberuflich' | 'beleg' | 'kombi';
@@ -151,14 +156,19 @@ interface BeratungDaten {
   kinder: number;
   kinderUeber6: number;
 
+  // Versicherungs-/Vorsorge-Status (Hoch-Prio-Felder)
+  drvPflicht: boolean;
+  bestehendeBU: { hat: boolean; monatsRente: number; endalter: number };
+  bestehenderRiester: boolean;
+  notgroschenMonate: number;
+
   // Arbeitsalltag (für Steueroptimierung)
   kilometer: number;
   homeofficeTage: number;
   fortbildungen: number;
   equipment: number;
 
-  // Status quo
-  hatBU: boolean;
+  // Status quo (qualitative Flags)
   nutztFoerderungen: boolean;
   steueroptimiert: boolean;
   hatFlexibleVorsorge: boolean;
@@ -168,10 +178,25 @@ interface BeratungDaten {
   startCapital: number;
   ausstiegsalter: number;
 
-  // Version für Migrations
-  schemaVersion: number;
+  schemaVersion: 2;
 }
 ```
+
+#### Sub-Profile
+
+Die fünf Sub-Profile sind Schnellstart-Defaults für den Wizard. Sie spiegeln typische
+Hebammen-Berufsbilder und füllen Felder pre, die der Berater selten kennt:
+
+| Sub-Profil | Status | Geburtshilfe | Typ. Monatsbrutto |
+|---|---|---|---|
+| `klinik` | angestellt | ja | 3.400 € |
+| `wochenbett` | freiberuflich | nein | 3.200 € |
+| `geburtshilfe` | freiberuflich | ja | 4.500 € |
+| `beleg` | beleg | ja | 4.000 € |
+| `praxis` | freiberuflich | nein | 3.800 € |
+
+Defaults liegen in `lib/calc/types.ts` (`SUB_PROFIL_DEFAULTS`). Bei Änderungen
+auch hier dokumentieren.
 
 ### Tabelle: `parameter_log` (Audit-Trail)
 ```sql
@@ -200,28 +225,43 @@ Berechnet Steuerersparnis. Bei Freiberuflichen vergleicht Hebammen-Betriebsausga
 Berechnet jährliche Fördersumme: AVD-Zulagen (Grund + Kind + Berufseinsteiger), BAV (Klinikzuschuss + SV-Ersparnis), VL, GKV-Sicherstellungszuschlag bei Geburtshilfe, Frühstart-Rente.
 
 ### `lib/calc/altersvorsorge.ts`
-Compound-Interest-Funktion: `computeWealth(monthly, years, rate, startCapital)`. Berechnet auch:
-- Aktuelles Szenario
-- Optimiertes Szenario (aktuelle Sparrate + 70% des freigesetzten Potenzials)
-- Maximales Szenario (alles ausgereizt)
-- Versorgungslücke
+Compound-Interest mit monatlicher Sparrate, plus Realwert-Funktion. Berechnet:
+- Drei Szenarien (aktuell / optimiert = +70 % freigesetztes Potenzial / maximal = +100 %)
+- Jeder Wert kommt **nominal UND real** (in heutiger Kaufkraft) zurück
+- Versorgungslücke gegen 1.500 €/Mon × 30 J Bedarf
+- **BU-Stresstest**: wenn ab Alter 50 keine Beiträge mehr fließen, wieviel Kapital bleibt?
+- Rendite + Inflation als Parameter (Default 6 % / 2 %) – im UI via Slider justierbar
+
+### `lib/calc/ruerup.ts`
+Rürup-Höchstbetrag mit **DRV-Anrechnung**. Wichtig, weil Hebammen als Pflegende
+typischerweise Pflichtmitglied der DRV sind – ohne Anrechnung wird das Potenzial
+überschätzt.
+
+### `lib/calc/bu.ts`
+BU-Lücken-Analyse: empfohlene Rente = 80 % vom Netto (Brutto × 0,65). Liefert
+Status `fehlt` / `unterversorgt` / `ok` / `gut` plus Lücke in € und %.
 
 ### `lib/calc/score.ts`
-Vorsorge-Score 0–100, basierend auf 5 Sub-Scores:
+Vorsorge-Score 0–100, basierend auf 6 Sub-Scores:
 - Sparquote (in % vom Einkommen)
-- BU-Schutz (binär ja/nein → 95/15)
+- BU-Schutz (skaliert mit Rentenhöhe, 15 wenn keine BU)
 - Förderquote
 - Steuer-Optimierung
 - Flexibilität (3. Schicht vorhanden?)
+- Liquider Puffer (Notgroschen in Monatsnettos)
 
 ### `lib/calc/empfehlungen.ts`
-Generiert priorisierte Top-3-Empfehlungen basierend auf Lücken. Logik:
-- Wenn keine BU → Prio 1 BU
-- Wenn Sparquote < 10% → Sparrate erhöhen
-- Wenn Förderungen nicht genutzt → AVD setup
-- Etc.
+Priorisierte Top-3-Empfehlungen, in Layern:
+- **Existenz** (Prio 1): Notgroschen < 3 Monate, keine BU
+- **Substanz** (Prio 2): Sparquote < 10 %, ungenutzte Förderungen, Riester-Bestandscheck, BU-Lücke
+- **Feinjustage** (Prio 3): Steueroptimierung, flexible 3. Schicht
 
-Jede Empfehlung hat: `prio`, `title`, `why`, `impact`, `effort`, `effortMins`.
+Jede Empfehlung hat: `bereich`, `prio`, `title`, `why`, `impact`, `effort`, `effortMins`.
+
+### `lib/calc/aggregate.ts`
+Aggregations-Layer: führt alle Berechnungen aus den BeratungDaten zusammen.
+Ein Aufruf liefert alles für Auswertung + Detail-Views in einem Objekt.
+Akzeptiert `{ renditeNominal, inflation }` als Overrides für die Slider in der UI.
 
 ---
 
@@ -594,18 +634,23 @@ Markenidentität aus der bestehenden Präsentation. Warm, weiblich-konnotiert oh
 
 ## 14. Roadmap / Phasen
 
-### Phase 1 — MVP (Woche 1–2)
-- [x] Wizard mit 5 Schritten
-- [x] Auswertung mit Score, 3 Pillars, Timeline, Szenarien, Empfehlungen
-- [x] Detail-Views für Steuern, Förderungen, Altersvorsorge
-- [x] Persistente Sessions (Supabase)
-- [x] Login (Magic Link)
-- [x] PDF-Export der Zusammenfassung
+### Phase 1 — MVP (umgesetzt)
+- [x] Wizard mit Sub-Profil-Schnellstart + 4 inhaltlichen Schritten (5 insgesamt)
+- [x] LocalStorage-Persistenz (Adapter-Pattern, Supabase-ready)
+- [x] Auswertung mit Score, 3 Pillars, Lifeline, Szenarien, Empfehlungen
+- [x] Detail-Views für Steuern, Förderungen, Altersvorsorge (inkl. BU-Lücke + Rürup)
+- [x] Inflations- und Rendite-Slider auf der Auswertung (vorgezogen aus Phase 2)
+- [x] BU-Stresstest „BU mit 50&quot; (vorgezogen)
+- [x] Doppel-PDF: Mitnehmer (Hebamme) + Vollversion (Berater)
+- [x] Print-Stylesheet auf Zusammenfassungsseite
+- [ ] Persistente Sessions in Supabase (LocalStorage→Supabase-Migration, Phase 2)
+- [ ] Login (Magic Link) — Phase 2
 
 ### Phase 2 — Tiefe (Woche 3–4)
+- [ ] Supabase-Migration der LocalStorage-Daten + Auth
 - [ ] BU-Tarif-Schätzung je nach Alter (Tabelle pflegbar)
 - [ ] Mehrere Szenarien pro Hebamme speichern ("Lena Stand heute" / "Lena mit 2. Kind")
-- [ ] Inflations-Toggle (real vs. nominal)
+- [ ] §32a-Formel statt Stufenfunktion für Grenzsteuersatz
 - [ ] Admin-Bereich für Parameter-Pflege ohne Code-Änderung
 - [ ] Stand-Hinweis "Daten Stand: XX.YY.2026" überall im UI
 
