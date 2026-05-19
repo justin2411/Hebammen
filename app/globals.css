@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand colors – Single Source of Truth in config/brand.ts */
+  --color-cream: #FAF3EB;
+  --color-cream-dark: #F5EDE3;
+  --color-berry: #6B3343;
+  --color-berry-deep: #4A1E2A;
+  --color-berry-light: #8B4A5B;
+  --color-orange: #E89977;
+  --color-orange-soft: #F2C4AC;
+  --color-orange-deep: #C77658;
+  --color-green: #A8B9A1;
+  --color-ink: #2A2225;
+  --color-muted: #8A7A72;
+  --color-rule: #E5DCD2;
+  --color-danger: #B85450;
+  --color-warning: #D4A574;
+  --color-success: #6B8E6F;
+
+  --font-serif: "DM Serif Display", Georgia, serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html, body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
