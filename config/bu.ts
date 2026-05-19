@@ -1,25 +1,34 @@
 /**
- * BU-Tarif-Annahmen – PLATZHALTER.
+ * BU-Tarif-Annahmen für Hebammen (Berufsgruppe „medizinisch, körperlich/psychisch belastet").
  *
- * TODO Phase 2: Echte Werte aus Tarifrechnern / Versicherer-Konditionen einpflegen.
+ * Werte sind grobe Marktdurchschnitte aus öffentlichen Tarifrechnern (Stand 2026),
+ * Endalter 67, Beruf Hebamme/Pflege (Risikoklasse 3–4 je Anbieter).
+ * Konkret in der Beratung: immer Risikovoranfrage stellen, da Gesundheitszustand
+ * die Prämie um Faktor 1,5–3 streuen kann.
  *
  * Für Hebammen gilt: aufgrund körperlich und psychisch belastendem Beruf
  * sind BU-Prämien typischerweise hoch. BU statistisch zwischen 44–56 Jahren,
- * Nervenerkrankungen als häufigste Ursache.
- *
- * In Phase 1 nutzt die App nur die qualitative Information "hat BU ja/nein".
- * Keine konkreten Prämien-Schätzungen.
+ * Nervenerkrankungen häufigste Ursache.
  */
 export const BU_ANNAHMEN = {
-  // Beispiel-Struktur für Phase 2:
-  // praemieProMonat: {
-  //   alter25: { rente1500: 80, rente2000: 105 },
-  //   alter35: { rente1500: 110, rente2000: 145 },
-  //   alter45: { rente1500: 180, rente2000: 240 },
-  // },
+  empfohleneRenteMinProzentNetto: 0.8,
+  rechtsklasseHebamme: '3–4 (mittlere bis erhöhte Risikogruppe)',
+  /**
+   * Geschätzte Monatsprämien in € für 1.500 €/Monat Rente, Endalter 67, gesund.
+   * Pro 500 € Rentenerhöhung steigt die Prämie um ca. 55–65 %.
+   */
+  praemieJeAlter: {
+    25: 55,
+    30: 75,
+    35: 100,
+    40: 140,
+    45: 195,
+    50: 285,
+    55: 415,
+  } as Record<number, number>,
+  /** Faktor pro 500 € Mehrrente (multiplikativ). */
+  faktorPro500MehrRente: 1.6,
+  letztePruefung: '2026-05-19',
   hinweis:
-    'BU-Prämien sind individuell und vom Gesundheitszustand abhängig. ' +
-    'Konkrete Konditionen nur über echte Risikovoranfrage.',
-  empfohleneRenteMinProzentNetto: 0.80, // 80 % vom Nettoeinkommen
-  letztePruefung: '2026-05-18',
+    'BU-Prämien sind individuell. Konkrete Konditionen nur über Risikovoranfrage.',
 } as const;

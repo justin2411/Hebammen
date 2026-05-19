@@ -50,3 +50,48 @@ export function calcBuLuecke(input: BuLueckeInput): BuLueckeResult {
     status,
   };
 }
+
+export interface BuPraemienSchaetzung {
+  /** Alter, für das geschätzt wurde (gerundet auf Tabellen-Stützstelle). */
+  fuerAlter: number;
+  /** Untere Schätzung €/Monat. */
+  unten: number;
+  /** Mittlere Schätzung €/Monat. */
+  mitte: number;
+  /** Obere Schätzung €/Monat (Gesundheitseinschränkungen). */
+  oben: number;
+}
+
+/**
+ * Interpoliert eine grobe Monatsprämie für eine gewünschte BU-Rente bei
+ * gegebenem Alter. Streuung ±40 % wegen Gesundheitseinschluss.
+ *
+ * Hinweis: keine Bedingungsdetails, keine konkreten Tarife. Reine
+ * Hausnummer für das Gespräch, in der Realität immer Risikovoranfrage.
+ */
+export function schaetzeBuPraemie(input: {
+  alter: number;
+  rente: number;
+}): BuPraemienSchaetzung {
+  const tabelle = BU_ANNAHMEN.praemieJeAlter;
+  const stuetzstellen = Object.keys(tabelle).map(Number).sort((a, b) => a - b);
+
+  // nächstgelegene Stützstelle finden
+  const alterClamped = Math.max(stuetzstellen[0], Math.min(stuetzstellen.at(-1)!, input.alter));
+  const fuerAlter = stuetzstellen.reduce((prev, curr) =>
+    Math.abs(curr - alterClamped) < Math.abs(prev - alterClamped) ? curr : prev,
+  );
+  const basisPraemie = tabelle[fuerAlter];
+
+  // Rentenhöhen-Faktor: linearer Anstieg pro 500 € über 1.500 € Basis-Rente
+  const stufenUeberBasis = Math.max(0, (input.rente - 1500) / 500);
+  const renteFaktor = Math.pow(BU_ANNAHMEN.faktorPro500MehrRente, stufenUeberBasis);
+  const mitte = Math.round(basisPraemie * renteFaktor);
+
+  return {
+    fuerAlter,
+    unten: Math.round(mitte * 0.7),
+    mitte,
+    oben: Math.round(mitte * 1.4),
+  };
+}
