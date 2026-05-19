@@ -25,7 +25,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="de" className={`${serif.variable} ${sans.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-cream text-ink">{children}</body>
+      <body className="min-h-full flex flex-col bg-cream text-ink" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
