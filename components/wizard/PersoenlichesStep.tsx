@@ -63,6 +63,20 @@ export function PersoenlichesStep({ daten, hebammeName, onChangeName, onChange }
           />
         </Field>
 
+        <Field
+          label="Berufseintrittsalter"
+          hint="Wann hast du als Hebamme angefangen? Beeinflusst die DRV-Beitragsjahre."
+        >
+          <NumberInput
+            min={16}
+            max={50}
+            value={daten.berufseintrittsalter}
+            onChange={(e) =>
+              onChange({ berufseintrittsalter: Number(e.target.value) || 22 })
+            }
+          />
+        </Field>
+
         <Field label="Anzahl Kinder">
           <NumberInput
             min={0}

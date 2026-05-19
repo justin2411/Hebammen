@@ -9,7 +9,8 @@ import {
   SourcesBox,
 } from '@/components/module/ModuleLayout';
 import { Card } from '@/components/ui/Card';
-import { Range } from '@/components/ui/Field';
+import { Field, NumberInput, Range } from '@/components/ui/Field';
+import { WunschGauge } from '@/components/shared/WunschGauge';
 import { formatEuro } from '@/lib/utils';
 import { calcBuLuecke, schaetzeBuPraemie } from '@/lib/calc/bu';
 import { calcEinkommensPhasen } from '@/lib/calc/einkommensphasen';
@@ -34,6 +35,16 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
   const [wunschRente, setWunschRente] = useState(
     Math.max(1500, Math.round(luecke.empfohleneMonatsRente / 250) * 250),
   );
+
+  // Absicherungswunsch — wieviel zusätzliche BU-Rente will sie haben?
+  const [absicherungswunsch, setAbsicherungswunsch] = useState(
+    Math.max(0, luecke.empfohleneMonatsRente - luecke.bestehend),
+  );
+  const gesamtBuAbsicherung = luecke.bestehend + absicherungswunsch;
+  const absicherungsProzent =
+    luecke.empfohleneMonatsRente > 0
+      ? Math.round((gesamtBuAbsicherung / luecke.empfohleneMonatsRente) * 100)
+      : 100;
 
   const schaetzungAktuell = schaetzeBuPraemie({ alter: daten.alter, rente: wunschRente });
 
@@ -161,42 +172,107 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
           </>
         }
       >
-        <Card>
-          <Range
-            label="Gewünschte BU-Rente pro Monat"
-            min={1000}
-            max={3500}
-            step={100}
-            value={wunschRente}
-            onChange={setWunschRente}
-            formatValue={(v) => formatEuro(v) + '/Mon'}
-          />
+        <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+          <Card>
+            <Range
+              label="Gewünschte BU-Rente pro Monat"
+              min={1000}
+              max={3500}
+              step={100}
+              value={wunschRente}
+              onChange={setWunschRente}
+              formatValue={(v) => formatEuro(v) + '/Mon'}
+            />
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <PraemieBox
-              label="Untere Schätzung"
-              value={schaetzungAktuell.unten}
-              hint="bestmögliche Gesundheit"
-            />
-            <PraemieBox
-              label="Realistisch"
-              value={schaetzungAktuell.mitte}
-              hint="durchschnittlich gesund"
-              accent
-            />
-            <PraemieBox
-              label="Mit Zuschlag"
-              value={schaetzungAktuell.oben}
-              hint="z.B. Vor-OPs, Therapien"
-            />
-          </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <PraemieBox
+                label="Untere Schätzung"
+                value={schaetzungAktuell.unten}
+                hint="bestmögliche Gesundheit"
+              />
+              <PraemieBox
+                label="Realistisch"
+                value={schaetzungAktuell.mitte}
+                hint="durchschnittlich gesund"
+                accent
+              />
+              <PraemieBox
+                label="Mit Zuschlag"
+                value={schaetzungAktuell.oben}
+                hint="z.B. Vor-OPs, Therapien"
+              />
+            </div>
 
-          <p className="mt-4 text-xs text-muted">
-            Werte für Alter {schaetzungAktuell.fuerAlter} (gerundete Stützstelle). Hebammen werden
-            je nach Versicherer unterschiedlich eingestuft — bis Faktor 1,5 zwischen Anbietern
-            realistisch.
-          </p>
-        </Card>
+            <p className="mt-4 text-xs text-muted">
+              Werte für Alter {schaetzungAktuell.fuerAlter} (gerundete Stützstelle). Hebammen
+              werden je nach Versicherer unterschiedlich eingestuft — bis Faktor 1,5 zwischen
+              Anbietern realistisch.
+            </p>
+          </Card>
+
+          {/* Absicherungswunsch-Gauge */}
+          <Card>
+            <p className="text-xs uppercase tracking-wide text-muted">Absicherungswunsch</p>
+            <div className="mt-3 flex items-center gap-4">
+              <WunschGauge prozent={Math.min(100, absicherungsProzent)} />
+              <div>
+                <p
+                  className={`font-serif text-2xl tabular-nums ${
+                    absicherungsProzent >= 80
+                      ? 'text-green'
+                      : absicherungsProzent >= 40
+                        ? 'text-orange-deep'
+                        : 'text-danger'
+                  }`}
+                >
+                  {absicherungsProzent} %
+                </p>
+                <p className="text-xs text-muted">der Empfehlung</p>
+              </div>
+            </div>
+
+            <Field
+              label="Gewünschte BU-Rente zusätzlich (€/Mon)"
+              hint={`Bestehend: ${formatEuro(luecke.bestehend)}/Mon · empfohlen: ${formatEuro(luecke.empfohleneMonatsRente)}/Mon`}
+            >
+              <NumberInput
+                min={0}
+                step={100}
+                value={absicherungswunsch}
+                onChange={(e) =>
+                  setAbsicherungswunsch(Math.max(0, Number(e.target.value) || 0))
+                }
+              />
+            </Field>
+
+            <div className="mt-3 rounded-md bg-cream-dark/50 p-3 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted">Bestand</span>
+                <span className="tabular-nums">{formatEuro(luecke.bestehend)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Neu absichern</span>
+                <span className="tabular-nums">{formatEuro(absicherungswunsch)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-rule pt-1">
+                <span className="font-medium text-ink">Gesamt</span>
+                <span className="font-medium tabular-nums text-berry">
+                  {formatEuro(gesamtBuAbsicherung)}
+                </span>
+              </div>
+            </div>
+
+            {absicherungsProzent < 80 && (
+              <p className="mt-3 text-xs text-danger">
+                Lücke bleibt:{' '}
+                {formatEuro(
+                  Math.max(0, luecke.empfohleneMonatsRente - gesamtBuAbsicherung),
+                )}{' '}
+                /Mon
+              </p>
+            )}
+          </Card>
+        </div>
 
         <Card className="mt-5 bg-cream-dark">
           <div className="flex items-start gap-3">

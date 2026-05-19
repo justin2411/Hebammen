@@ -5,6 +5,7 @@ import { Plus, Trash2, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Field, NumberInput, Range, Select, Toggle } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { WunschGauge } from '@/components/shared/WunschGauge';
 import { formatEuro } from '@/lib/utils';
 import {
   calcVersorgungsziel,
@@ -199,6 +200,12 @@ export function AvRechner({ daten: initial }: AvRechnerProps) {
               luecke={ziel.versorgungsluecke * kaufkraftFaktor}
               rente={ziel.erwarteteGesamtrenteNetto * kaufkraftFaktor}
               referenz={ziel.zielMitInflation * kaufkraftFaktor}
+              renteBrutto={ziel.erwarteteGesamtrenteBrutto * kaufkraftFaktor}
+              positionen={ziel.positionen.map((p) => ({
+                ...p,
+                bruttoMonat: p.bruttoMonat * kaufkraftFaktor,
+                nettoMonat: p.nettoMonat * kaufkraftFaktor,
+              }))}
             />
           </div>
 
@@ -421,15 +428,20 @@ function BalkenStapelBox({
   luecke,
   rente,
   referenz,
+  renteBrutto,
+  positionen,
 }: {
   luecke: number;
   rente: number;
   referenz: number;
+  renteBrutto: number;
+  positionen: Array<{ label: string; bruttoMonat: number; nettoMonat: number }>;
 }) {
   const total = luecke + rente;
   const totalHeight = (total / referenz) * 50 * 2.4;
   const renteHeight = (rente / total) * totalHeight;
   const lueckeHeight = totalHeight - renteHeight;
+  const kvSteuerAbzug = Math.max(0, renteBrutto - rente);
   return (
     <div className="flex flex-col items-center">
       <div className="w-full">
@@ -447,7 +459,7 @@ function BalkenStapelBox({
           </div>
         )}
         <div
-          className={`flex items-end justify-center bg-green/80 text-white ${luecke > 0 ? '' : 'rounded-t-xl'}`}
+          className={`group relative flex items-end justify-center bg-green/80 text-white ${luecke > 0 ? '' : 'rounded-t-xl'}`}
           style={{ height: `${renteHeight}px` }}
         >
           <div className="pb-2 text-center">
@@ -456,40 +468,37 @@ function BalkenStapelBox({
             </p>
             <p className="text-[10px] uppercase">Rente</p>
           </div>
+          {/* Hover-Tooltip mit Aufschlüsselung */}
+          <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 group-hover:block">
+            <div className="min-w-56 rounded-lg bg-ink p-3 text-left text-xs text-white shadow-lg">
+              <p className="mb-2 font-medium">Rentenaufschlüsselung</p>
+              {positionen.map((p, i) => (
+                <div key={i} className="flex justify-between gap-3 text-cream/80">
+                  <span>{p.label}</span>
+                  <span className="tabular-nums">{formatEuro(p.nettoMonat)} netto</span>
+                </div>
+              ))}
+              <div className="mt-2 border-t border-cream/20 pt-2">
+                <div className="flex justify-between">
+                  <span>Brutto gesamt</span>
+                  <span className="tabular-nums">{formatEuro(renteBrutto)}</span>
+                </div>
+                <div className="flex justify-between text-cream/70">
+                  <span>KV + Steuer</span>
+                  <span className="tabular-nums">− {formatEuro(kvSteuerAbzug)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-green">
+                  <span>Netto</span>
+                  <span className="tabular-nums">{formatEuro(rente)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="mx-auto h-2 w-2 -translate-y-1 rotate-45 bg-ink" />
+          </div>
         </div>
       </div>
-      <p className="mt-2 text-center text-xs text-muted">Lücke vs. erwartete Rente</p>
+      <p className="mt-2 text-center text-xs text-muted">Lücke vs. erwartete Rente · Hover für Details</p>
     </div>
-  );
-}
-
-function WunschGauge({ prozent }: { prozent: number }) {
-  const radius = 36;
-  const circumference = Math.PI * radius;
-  const dashOffset = circumference - (prozent / 100) * circumference;
-  const color =
-    prozent >= 80 ? '#6B8E6F' : prozent >= 40 ? '#C77658' : '#B85450';
-
-  return (
-    <svg width={92} height={56} viewBox="0 0 92 56">
-      <path
-        d="M 10 50 A 36 36 0 0 1 82 50"
-        fill="none"
-        stroke="#E5DCD2"
-        strokeWidth={10}
-        strokeLinecap="round"
-      />
-      <path
-        d="M 10 50 A 36 36 0 0 1 82 50"
-        fill="none"
-        stroke={color}
-        strokeWidth={10}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={dashOffset}
-        style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
-      />
-    </svg>
   );
 }
 
