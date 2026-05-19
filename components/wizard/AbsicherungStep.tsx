@@ -1,7 +1,7 @@
 'use client';
 
-import { Field, NumberInput, Toggle } from '@/components/ui/Field';
-import type { BeratungDaten } from '@/lib/calc/types';
+import { Field, NumberInput, Select, Toggle } from '@/components/ui/Field';
+import type { BeratungDaten, KvArt, Steuerklasse } from '@/lib/calc/types';
 
 interface Props {
   daten: BeratungDaten;
@@ -113,6 +113,73 @@ export function AbsicherungStep({ daten, onChange }: Props) {
           label="Flexible 3. Schicht"
           description="ETF-Depot oder Nettopolice"
         />
+      </div>
+
+      {/* Schema-v3: Einkommenssicherung — präzisere Netto-Berechnung */}
+      <div className="space-y-3 rounded-lg border border-rule bg-cream-dark/30 p-5">
+        <h3 className="font-serif text-lg text-berry">
+          Steuer & Krankenversicherung
+        </h3>
+        <p className="text-sm text-muted">
+          Für die genaue Netto-Rechnung und das Krankengeld-/BU-Szenario.
+        </p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Steuerklasse">
+            <Select
+              value={daten.steuerklasse}
+              onChange={(e) =>
+                onChange({ steuerklasse: Number(e.target.value) as Steuerklasse })
+              }
+            >
+              <option value={1}>1 — ledig</option>
+              <option value={2}>2 — alleinerziehend</option>
+              <option value={3}>3 — verheiratet (Hauptverdienend)</option>
+              <option value={4}>4 — verheiratet (gleich verdienend)</option>
+              <option value={5}>5 — verheiratet (zweitverdienend)</option>
+              <option value={6}>6 — Zweitjob</option>
+            </Select>
+          </Field>
+
+          <Field label="Krankenversicherung">
+            <Select
+              value={daten.kvArt}
+              onChange={(e) => onChange({ kvArt: e.target.value as KvArt })}
+            >
+              <option value="gkv_pflicht">Gesetzlich pflichtversichert</option>
+              <option value="gkv_freiwillig">Gesetzlich freiwillig (kein Krankengeld)</option>
+              <option value="gkv_wahltarif">Gesetzlich + Wahltarif Krankengeld</option>
+              <option value="pkv">Privat</option>
+            </Select>
+          </Field>
+        </div>
+
+        <Toggle
+          checked={daten.kirchensteuer}
+          onChange={(v) => onChange({ kirchensteuer: v })}
+          label="Kirchensteuerpflichtig"
+          description="8 % in BW/BY, sonst 9 % der Lohnsteuer"
+        />
+
+        {(daten.kvArt === 'pkv' || daten.kvArt === 'gkv_freiwillig') && (
+          <Field
+            label="Monatliches Krankentagegeld (€)"
+            hint={
+              daten.kvArt === 'pkv'
+                ? 'Aus deinem PKV-Vertrag — steuer- und SV-frei. 0 wenn nicht abgeschlossen.'
+                : 'Wahltarif/Wahlleistung deiner Kasse. 0 wenn nicht abgeschlossen.'
+            }
+          >
+            <NumberInput
+              min={0}
+              step={100}
+              value={daten.krankentagegeld}
+              onChange={(e) =>
+                onChange({ krankentagegeld: Number(e.target.value) || 0 })
+              }
+            />
+          </Field>
+        )}
       </div>
     </div>
   );

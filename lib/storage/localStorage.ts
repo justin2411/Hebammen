@@ -1,4 +1,5 @@
 import type { Beratung, BeratungAdapter } from './types';
+import { migrateBeratungDaten } from '@/lib/calc/types';
 
 const KEY = 'hebammen-vorsorge:beratungen';
 
@@ -8,7 +9,12 @@ function readAll(): Beratung[] {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Beratung[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Auto-Migration alter Beratungen auf aktuelles Schema
+    return parsed.map((b) => ({
+      ...b,
+      daten: migrateBeratungDaten(b.daten),
+    }));
   } catch {
     return [];
   }

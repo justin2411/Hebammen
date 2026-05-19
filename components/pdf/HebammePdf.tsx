@@ -19,7 +19,7 @@ interface Props {
  * Spiegelt die 5 Module + Empfehlungen + nächste Schritte.
  */
 export function HebammePdf({ beratung, result }: Props) {
-  const insights = buildTopicInsights(result);
+  const insights = buildTopicInsights(result, beratung.daten);
 
   return (
     <Document title={`Hebammen·Vorsorge – Zusammenfassung ${beratung.hebammeName}`}>
