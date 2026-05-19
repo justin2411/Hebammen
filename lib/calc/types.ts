@@ -28,6 +28,28 @@ export type Steuerklasse = 1 | 2 | 3 | 4 | 5 | 6;
 /** Art der Krankenversicherung – beeinflusst Krankengeld/-tagegeld. */
 export type KvArt = 'gkv_pflicht' | 'gkv_freiwillig' | 'gkv_wahltarif' | 'pkv';
 
+/** Art einer bestehenden Altersvorsorge-Position. */
+export type VorsorgeArt =
+  | 'drv'
+  | 'rürup'
+  | 'riester'
+  | 'bav'
+  | 'avd'
+  | 'etf'
+  | 'nettopolice'
+  | 'sonstiges';
+
+/** Ein konkreter bestehender Vorsorge-Vertrag mit seinem Beitrag zur monatlichen Rente. */
+export interface BestehendeVorsorge {
+  id: string;
+  art: VorsorgeArt;
+  label: string;
+  /** Erwartete monatliche Brutto-Rente aus diesem Vertrag. */
+  monatsRente: number;
+  /** Aktuelle monatliche Einzahlung (für Zinseszins-Hochrechnung). */
+  monatsSparrate?: number;
+}
+
 /**
  * Eingabedaten einer Beratung. Spiegelt das JSONB-Schema
  * von beratungen.daten in Supabase wider (Briefing §4 + Phase-2-Erweiterungen).
@@ -89,6 +111,28 @@ export interface BeratungDaten {
    * Default für UI: 3 (mittleres Szenario).
    */
   restleistungsvermoegen: number;
+
+  // Schema-v4: AV-Rechner
+  /**
+   * Versorgungsziel im Alter — gewünschtes monatliches Netto.
+   * Default: 70 % vom aktuellen Netto.
+   */
+  versorgungszielNetto: number;
+  /** Lebenserwartung in Jahren (DRV-Schnitt Frauen: 89). */
+  lebenserwartung: number;
+  /** Rentensteigerung p.a. (typisch 0,01–0,02). */
+  rentensteigerungProJahr: number;
+  /** Rendite Ansparphase p.a. (Default 0,06). */
+  renditeAnsparphase: number;
+  /** Rendite Entnahmephase p.a. (Default 0,02 — konservativer im Alter). */
+  renditeEntnahmephase: number;
+  /**
+   * Liste bestehender Vorsorge-Verträge mit jeweils erwarteter monatlicher Rente.
+   * Erste DRV-Position wird beim Migrieren automatisch erstellt.
+   */
+  bestehendeVorsorgen: BestehendeVorsorge[];
+  /** Berufseintrittsalter — für DRV-Renten-Schätzung (Jahre der Beitragszahlung). */
+  berufseintrittsalter: number;
 
   schemaVersion: number;
 }
@@ -173,7 +217,7 @@ export const SUB_PROFIL_META: Record<SubProfil, { label: string; sub: string }> 
   },
 };
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** Default-Werte für die neuen Schema-v3-Felder (für Migration v2 → v3). */
 export const EINKOMMENSSICHERUNG_DEFAULTS = {
@@ -184,12 +228,24 @@ export const EINKOMMENSSICHERUNG_DEFAULTS = {
   restleistungsvermoegen: 3,
 } as const;
 
+/** Default-Werte für Schema-v4-Felder (AV-Rechner). */
+export const AV_RECHNER_DEFAULTS = {
+  versorgungszielNetto: 0, // wird in migrateBeratungDaten dynamisch gesetzt
+  lebenserwartung: 89,
+  rentensteigerungProJahr: 0.01,
+  renditeAnsparphase: 0.06,
+  renditeEntnahmephase: 0.02,
+  bestehendeVorsorgen: [] as BestehendeVorsorge[],
+  berufseintrittsalter: 22,
+} as const;
+
 /**
  * Migriert alte Beratungs-Daten auf die aktuelle Schema-Version.
  * Wird beim Laden aus LocalStorage aufgerufen.
  */
 export function migrateBeratungDaten(daten: Partial<BeratungDaten>): BeratungDaten {
   const merged = { ...daten } as BeratungDaten;
+
   if (!merged.schemaVersion || merged.schemaVersion < 3) {
     Object.assign(merged, {
       ...EINKOMMENSSICHERUNG_DEFAULTS,
@@ -198,6 +254,17 @@ export function migrateBeratungDaten(daten: Partial<BeratungDaten>): BeratungDat
       schemaVersion: 3,
     });
   }
+
+  if (merged.schemaVersion < 4) {
+    // Versorgungsziel ≈ 70 % vom geschätzten Netto (Netto ≈ Brutto × 0,65)
+    const geschaetztesNetto = Math.round((merged.monatsbrutto ?? 3200) * 0.65);
+    Object.assign(merged, {
+      ...AV_RECHNER_DEFAULTS,
+      versorgungszielNetto: Math.round(geschaetztesNetto * 0.7),
+      schemaVersion: 4,
+    });
+  }
+
   return merged;
 }
 
@@ -229,6 +296,8 @@ export function emptyBeratungDaten(subProfil: SubProfil = 'wochenbett'): Beratun
     startCapital: 0,
     ausstiegsalter: 65,
     ...EINKOMMENSSICHERUNG_DEFAULTS,
+    ...AV_RECHNER_DEFAULTS,
+    versorgungszielNetto: Math.round((SUB_PROFIL_DEFAULTS[subProfil].monatsbrutto ?? 3200) * 0.65 * 0.7),
     schemaVersion: CURRENT_SCHEMA_VERSION,
     ...SUB_PROFIL_DEFAULTS[subProfil],
   };

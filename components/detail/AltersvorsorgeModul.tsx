@@ -8,9 +8,10 @@ import {
   SourcesBox,
 } from '@/components/module/ModuleLayout';
 import { Card } from '@/components/ui/Card';
-import { Szenarien } from '@/components/results/Szenarien';
 import { formatEuro } from '@/lib/utils';
 import { aggregate } from '@/lib/calc/aggregate';
+import { calcVersorgungsziel } from '@/lib/calc/avRechner';
+import { AvRechner } from './AvRechner';
 import { RUERUP_2026 } from '@/config/ruerup';
 import { AVD_2027 } from '@/config/avd';
 import type { BeratungDaten } from '@/lib/calc/types';
@@ -23,15 +24,15 @@ interface AltersvorsorgeModulProps {
 export function AltersvorsorgeModul({ beratungId, daten }: AltersvorsorgeModulProps) {
   const agg = aggregate(daten);
   const ruerup = agg.ruerup;
-  const av = agg.altersvorsorge;
+  const ziel = calcVersorgungsziel(daten);
 
   return (
     <ModuleLayout
       beratungId={beratungId}
       modulId="altersvorsorge"
-      headlineKicker="Optimiertes Endkapital"
-      headlineValue={formatEuro(av.optimiert.endkapital)}
-      headlineHint={`Nominal in ${av.jahreBisAusstieg} Jahren. In heutiger Kaufkraft: ${formatEuro(av.optimiert.endkapitalReal)}. Schicht 1+2 — gefördert, dafür gesperrt bis 62/65.`}
+      headlineKicker="Deine Versorgungslücke im Alter"
+      headlineValue={formatEuro(ziel.versorgungsluecke) + ' / Mon'}
+      headlineHint={`Differenz zwischen Versorgungsziel (${formatEuro(ziel.zielMitInflation)} mit Inflation) und erwarteter Rente (${formatEuro(ziel.erwarteteGesamtrenteNetto)}). Schicht 1+2 — gefördert, dafür gesperrt bis 62/65.`}
     >
       {/* === Section 1: Status quo === */}
       <ModuleSection
@@ -121,13 +122,21 @@ export function AltersvorsorgeModul({ beratungId, daten }: AltersvorsorgeModulPr
         </Card>
       </ModuleSection>
 
-      {/* === Section 3: Szenarien === */}
+      {/* === Section 3: AV-Rechner — der Kernrechner === */}
       <ModuleSection
         number={3}
-        title="Spiel mit Rendite und Inflation"
-        intro="Die Szenarien zeigen, wie sich aktuelle vs. optimierte Sparrate über deine Jahre entwickeln. Inflation und Rendite kannst du verstellen — die Realität ist nicht 6 % nominal jedes Jahr."
+        title="Der Rechner — spiel mit Zielen und Sparrate"
+        intro={
+          <>
+            Drei Werkzeuge rechts: <strong>benötigtes Kapital</strong> (was am Ende
+            da sein muss), <strong>notwendige Sparrate</strong> (was du jetzt
+            beiseitelegen musst, inkl. „Was kostet dich Warten") und{' '}
+            <strong>Investitionswunsch</strong> (Gauge, ob deine geplante Sparrate
+            reicht). Bestehende Verträge unten erfassen — sie reduzieren die Lücke.
+          </>
+        }
       >
-        <Szenarien daten={daten} />
+        <AvRechner daten={daten} />
       </ModuleSection>
 
       {/* === Section 4: Nächste Schritte === */}
