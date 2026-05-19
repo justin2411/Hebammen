@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcBuLuecke } from '@/lib/calc/bu';
+import { calcBuLuecke, schaetzeBuPraemie } from '@/lib/calc/bu';
 
 describe('calcBuLuecke', () => {
   it('liefert "fehlt" wenn keine BU vorhanden', () => {
@@ -46,5 +46,35 @@ describe('calcBuLuecke', () => {
       bestehendeBU: { hat: false, monatsRente: 0, endalter: 67 },
     });
     expect(r.empfohleneMonatsRente).toBe(2080);
+  });
+});
+
+describe('schaetzeBuPraemie', () => {
+  it('Prämie steigt mit Alter (jüngere zahlen weniger)', () => {
+    const p25 = schaetzeBuPraemie({ alter: 25, rente: 1500 });
+    const p45 = schaetzeBuPraemie({ alter: 45, rente: 1500 });
+    expect(p45.mitte).toBeGreaterThan(p25.mitte);
+  });
+
+  it('Prämie steigt mit Rentenhöhe', () => {
+    const p1500 = schaetzeBuPraemie({ alter: 35, rente: 1500 });
+    const p2500 = schaetzeBuPraemie({ alter: 35, rente: 2500 });
+    expect(p2500.mitte).toBeGreaterThan(p1500.mitte * 1.5);
+  });
+
+  it('Spanne unten-mitte-oben ist plausibel sortiert', () => {
+    const p = schaetzeBuPraemie({ alter: 40, rente: 2000 });
+    expect(p.unten).toBeLessThan(p.mitte);
+    expect(p.mitte).toBeLessThan(p.oben);
+  });
+
+  it('clampt Alter auf Tabellengrenzen (z.B. 60 → 55)', () => {
+    const p = schaetzeBuPraemie({ alter: 60, rente: 1500 });
+    expect(p.fuerAlter).toBe(55);
+  });
+
+  it('clampt sehr junges Alter auf Mindest-Stützstelle', () => {
+    const p = schaetzeBuPraemie({ alter: 18, rente: 1500 });
+    expect(p.fuerAlter).toBe(25);
   });
 });
