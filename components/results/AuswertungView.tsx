@@ -110,7 +110,7 @@ export function AuswertungView({ beratung }: AuswertungViewProps) {
 
       {/* Empfehlungen */}
       <div className="mt-10">
-        <Empfehlungen empfehlungen={result.empfehlungen} />
+        <Empfehlungen empfehlungen={result.empfehlungen} beratungId={beratung.id} />
       </div>
 
       {/* Aktionen */}

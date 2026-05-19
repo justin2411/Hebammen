@@ -86,3 +86,20 @@ export const MODUL_REIHENFOLGE: ModulId[] = [
   'altersvorsorge',
   'vermoegensaufbau',
 ];
+
+import type { EmpfehlungsBereich } from './empfehlungen';
+
+/**
+ * Mapping vom Empfehlungs-Bereich auf die thematisch passende Modul-Seite.
+ * So kann die Hebamme direkt von einer Empfehlung ins richtige Modul springen.
+ */
+export const EMPFEHLUNG_TO_MODUL: Record<EmpfehlungsBereich, ModulId> = {
+  bu: 'bu-schutz',
+  bu_luecke: 'bu-schutz',
+  notgroschen: 'vermoegensaufbau',
+  sparrate: 'vermoegensaufbau',
+  flexible_vorsorge: 'vermoegensaufbau',
+  foerderungen: 'foerderungen',
+  riester_check: 'altersvorsorge',
+  steuern: 'steuern',
+};
