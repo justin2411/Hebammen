@@ -22,6 +22,12 @@ export interface BestehendeBU {
   endalter: number;
 }
 
+/** Steuerklasse 1–6 nach EStG. */
+export type Steuerklasse = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** Art der Krankenversicherung – beeinflusst Krankengeld/-tagegeld. */
+export type KvArt = 'gkv_pflicht' | 'gkv_freiwillig' | 'gkv_wahltarif' | 'pkv';
+
 /**
  * Eingabedaten einer Beratung. Spiegelt das JSONB-Schema
  * von beratungen.daten in Supabase wider (Briefing §4 + Phase-2-Erweiterungen).
@@ -64,6 +70,25 @@ export interface BeratungDaten {
   aktuelleSparrate: number;
   startCapital: number;
   ausstiegsalter: number;
+
+  // Schema-v3: Einkommenssicherung
+  /** Lohnsteuerklasse. Default: 1 (ledig). */
+  steuerklasse: Steuerklasse;
+  /** Kirchensteuerpflichtig (8 % BW/BY, sonst 9 %). */
+  kirchensteuer: boolean;
+  /** Art der Krankenversicherung — entscheidend für Krankengeld. */
+  kvArt: KvArt;
+  /**
+   * Monatliches Krankentagegeld (PKV) oder freiwilliges GKV-Wahltarif-Krankengeld.
+   * 0 wenn nicht abgeschlossen / nicht relevant. Greift nach Phase 1 (6 Wo Lohnfortzahlung).
+   */
+  krankentagegeld: number;
+  /**
+   * Restleistungsvermögen-Annahme im BU-Szenario (Stunden pro Tag).
+   * § 43 SGB VI: ≥ 6h = keine EM, 3–6h = halbe EM, < 3h = volle EM.
+   * Default für UI: 3 (mittleres Szenario).
+   */
+  restleistungsvermoegen: number;
 
   schemaVersion: number;
 }
@@ -148,7 +173,33 @@ export const SUB_PROFIL_META: Record<SubProfil, { label: string; sub: string }> 
   },
 };
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
+
+/** Default-Werte für die neuen Schema-v3-Felder (für Migration v2 → v3). */
+export const EINKOMMENSSICHERUNG_DEFAULTS = {
+  steuerklasse: 1 as Steuerklasse,
+  kirchensteuer: false,
+  kvArt: 'gkv_pflicht' as KvArt,
+  krankentagegeld: 0,
+  restleistungsvermoegen: 3,
+} as const;
+
+/**
+ * Migriert alte Beratungs-Daten auf die aktuelle Schema-Version.
+ * Wird beim Laden aus LocalStorage aufgerufen.
+ */
+export function migrateBeratungDaten(daten: Partial<BeratungDaten>): BeratungDaten {
+  const merged = { ...daten } as BeratungDaten;
+  if (!merged.schemaVersion || merged.schemaVersion < 3) {
+    Object.assign(merged, {
+      ...EINKOMMENSSICHERUNG_DEFAULTS,
+      // verheiratet → Steuerklasse 4 als Default (Splitting), sonst 1
+      steuerklasse: daten.verheiratet ? 4 : 1,
+      schemaVersion: 3,
+    });
+  }
+  return merged;
+}
 
 /**
  * Liefert ein leeres BeratungDaten-Objekt mit sinnvollen Defaults.
@@ -177,6 +228,7 @@ export function emptyBeratungDaten(subProfil: SubProfil = 'wochenbett'): Beratun
     aktuelleSparrate: 0,
     startCapital: 0,
     ausstiegsalter: 65,
+    ...EINKOMMENSSICHERUNG_DEFAULTS,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     ...SUB_PROFIL_DEFAULTS[subProfil],
   };

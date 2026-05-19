@@ -1,6 +1,8 @@
 import { formatEuro } from '@/lib/utils';
+import { calcEinkommensPhasen } from './einkommensphasen';
 import type { AggregateResult } from './aggregate';
 import type { ModulId } from './module';
+import type { BeratungDaten } from './types';
 
 export type Tone = 'gap' | 'opportunity' | 'risk' | 'ok';
 
@@ -17,6 +19,7 @@ export interface TopicInsight {
  */
 export function buildTopicInsights(
   result: AggregateResult,
+  daten?: BeratungDaten,
 ): Record<ModulId, TopicInsight> {
   const jahreBisAusstieg = Math.max(1, result.altersvorsorge.jahreBisAusstieg);
 
@@ -68,32 +71,41 @@ export function buildTopicInsights(
           tone: 'opportunity',
         };
 
-  // BU-Schutz
+  // BU-Schutz — wenn Daten vorhanden, nutze die starke „Verlust gesamte BU"-Zahl
   const bu = result.buLuecke;
-  const buInsight: TopicInsight =
-    bu.status === 'fehlt'
-      ? {
-          kicker: 'BU-Schutz fehlt komplett',
-          value: `Lücke ${formatEuro(bu.luecke)}/Mon`,
-          tone: 'risk',
-        }
-      : bu.status === 'unterversorgt'
-        ? {
-            kicker: 'BU-Lücke pro Monat',
-            value: formatEuro(bu.luecke),
-            tone: 'risk',
-          }
-        : bu.status === 'ok'
-          ? {
-              kicker: 'BU-Schutz fast komplett',
-              value: `noch ${formatEuro(Math.max(0, bu.luecke))}/Mon offen`,
-              tone: 'opportunity',
-            }
-          : {
-              kicker: 'BU-Schutz',
-              value: 'solide aufgestellt',
-              tone: 'ok',
-            };
+  let buInsight: TopicInsight;
+  if (daten && bu.status !== 'gut') {
+    const phasen = calcEinkommensPhasen(daten);
+    buInsight = {
+      kicker: 'Verlust bei BU bis zur Rente',
+      value: formatEuro(phasen.verlustBisRente),
+      tone: 'risk',
+    };
+  } else if (bu.status === 'fehlt') {
+    buInsight = {
+      kicker: 'BU-Schutz fehlt komplett',
+      value: `Lücke ${formatEuro(bu.luecke)}/Mon`,
+      tone: 'risk',
+    };
+  } else if (bu.status === 'unterversorgt') {
+    buInsight = {
+      kicker: 'BU-Lücke pro Monat',
+      value: formatEuro(bu.luecke),
+      tone: 'risk',
+    };
+  } else if (bu.status === 'ok') {
+    buInsight = {
+      kicker: 'BU-Schutz fast komplett',
+      value: `noch ${formatEuro(Math.max(0, bu.luecke))}/Mon offen`,
+      tone: 'opportunity',
+    };
+  } else {
+    buInsight = {
+      kicker: 'BU-Schutz',
+      value: 'solide aufgestellt',
+      tone: 'ok',
+    };
+  }
 
   // Kumulativ über Jahre — als Subline-Variante wenn ersparnis gering ist
   void jahreBisAusstieg;

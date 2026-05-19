@@ -24,7 +24,7 @@ export function AuswertungView({ beratung }: AuswertungViewProps) {
   const result = aggregate(beratung.daten);
   const av = result.altersvorsorge;
   const kumuliert = result.freigesetztesPotenzialJahr * av.jahreBisAusstieg;
-  const insights = buildTopicInsights(result);
+  const insights = buildTopicInsights(result, beratung.daten);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">

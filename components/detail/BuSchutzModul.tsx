@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Heart, AlertCircle } from 'lucide-react';
+import { Heart, AlertCircle, TrendingDown } from 'lucide-react';
 import {
   ModuleLayout,
   ModuleSection,
@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Range } from '@/components/ui/Field';
 import { formatEuro } from '@/lib/utils';
 import { calcBuLuecke, schaetzeBuPraemie } from '@/lib/calc/bu';
+import { calcEinkommensPhasen } from '@/lib/calc/einkommensphasen';
 import { BU_ANNAHMEN } from '@/config/bu';
 import type { BeratungDaten } from '@/lib/calc/types';
 
@@ -26,155 +27,139 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
     bestehendeBU: daten.bestehendeBU,
   });
 
+  // Restleistungsvermögen lokal anpassbar — Daten bleiben unverändert
+  const [restleistung, setRestleistung] = useState(daten.restleistungsvermoegen);
+  const phasen = calcEinkommensPhasen({ ...daten, restleistungsvermoegen: restleistung });
+
   const [wunschRente, setWunschRente] = useState(
     Math.max(1500, Math.round(luecke.empfohleneMonatsRente / 250) * 250),
   );
 
-  const schaetzungAktuell = schaetzeBuPraemie({
-    alter: daten.alter,
-    rente: wunschRente,
-  });
-
-  // 3 Referenz-Rentenhöhen für die „Was möglich ist"-Sektion
-  const referenzRenten = [1500, 2000, 2500];
-
-  const headline =
-    luecke.status === 'fehlt'
-      ? { kicker: 'Du bist gerade', value: 'ohne Netz', hint: 'Aktuell kein BU-Schutz.' }
-      : luecke.status === 'unterversorgt'
-        ? {
-            kicker: 'Pro Monat fehlen dir',
-            value: formatEuro(luecke.luecke),
-            hint: `Empfohlene Rente: ${formatEuro(luecke.empfohleneMonatsRente)}, du hast ${formatEuro(luecke.bestehend)}.`,
-          }
-        : luecke.status === 'ok'
-          ? {
-              kicker: 'Fast vollständig — offen',
-              value: `${formatEuro(Math.max(0, luecke.luecke))}/Mon`,
-              hint: 'Kleine Lücke, aber kein akutes Loch.',
-            }
-          : {
-              kicker: 'BU-Schutz',
-              value: 'solide',
-              hint: 'Deine Versorgung deckt 80 % vom Netto oder mehr.',
-            };
+  const schaetzungAktuell = schaetzeBuPraemie({ alter: daten.alter, rente: wunschRente });
 
   return (
     <ModuleLayout
       beratungId={beratungId}
       modulId="bu-schutz"
-      headlineKicker={headline.kicker}
-      headlineValue={headline.value}
-      headlineHint={headline.hint}
+      headlineKicker="Verlust bei Berufsunfähigkeit bis Renteneintritt"
+      headlineValue={formatEuro(phasen.verlustBisRente)}
+      headlineHint={`Bei ${restleistung} h Restleistungsvermögen pro Tag. Hochgerechnet über ${Math.round(phasen.monateBisRente / 12)} Jahre — Netto-Differenz zur Erwerbsminderungsrente.`}
     >
       {/* === Section 1: Status quo === */}
       <ModuleSection
         number={1}
-        title="Was du heute hast — und was du brauchst"
+        title="Was passiert, wenn du morgen ausfällst — drei Phasen"
         intro={
           <>
-            Berufsunfähigkeit trifft Hebammen statistisch zwischen 44 und 56 Jahren,
-            häufigste Ursachen sind Nervenerkrankungen, Bandscheibe und psychische
-            Erschöpfung. 43,6 % denken laut opta-data-Studie 2025 über einen Berufswechsel
-            nach — die Risiken sind real.
+            Wer Hebamme nicht mehr ausüben kann, durchläuft drei Phasen. Jede hat
+            eigene Leistungen und Lücken — sichtbar gemacht.
           </>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <StatusCard
-            label="Heute abgedeckt"
-            value={formatEuro(luecke.bestehend) + ' / Mon'}
-            sublabel={
-              daten.bestehendeBU.hat
-                ? `Endalter: ${daten.bestehendeBU.endalter}`
-                : 'Kein laufender Vertrag'
-            }
-            tone={daten.bestehendeBU.hat ? 'neutral' : 'risk'}
-          />
-          <StatusCard
-            label="Empfehlung (80 % vom Netto)"
-            value={formatEuro(luecke.empfohleneMonatsRente) + ' / Mon'}
-            sublabel="Decke Lebenshaltung ohne Sozialfall-Risiko"
-            tone="positive"
-          />
+        <div className="grid gap-3 lg:grid-cols-3">
+          {phasen.phasen.map((p) => (
+            <PhasenCard key={p.id} phase={p} nettoReferenz={phasen.nettoReferenz} />
+          ))}
         </div>
 
-        {luecke.luecke > 0 && (
-          <Card className="mt-4 border-danger/40 bg-danger/5">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
-              <div>
-                <p className="font-medium text-ink">
-                  Lücke: {formatEuro(luecke.luecke)} / Monat
-                </p>
-                <p className="mt-1 text-sm text-ink/80">
-                  Wenn dir morgen die Hände nicht mehr mitspielen oder der Rücken
-                  endgültig sagt „so nicht weiter", fällt dieser Betrag im Monat weg.
-                  Über 20 Jahre Berufsunfähigkeit sind das{' '}
-                  <strong>{formatEuro(luecke.luecke * 12 * 20)}</strong>, die dir keiner
-                  ersetzt — die Erwerbsminderungsrente der DRV liegt typischerweise bei
-                  unter 1.000 € und ist nur in Vollberufsunfähigkeit zahlbar.
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
+        <Card className="mt-5">
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm text-muted">Dein Referenz-Netto</p>
+            <p className="font-serif text-xl text-berry tabular-nums">
+              {formatEuro(phasen.nettoReferenz)} / Mon
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Berechnet aus {formatEuro(daten.monatsbrutto)} Brutto, Steuerklasse{' '}
+            {daten.steuerklasse}, {daten.kvArt === 'pkv' ? 'PKV' : 'GKV'}
+            {daten.kirchensteuer ? ', kirchensteuerpflichtig' : ''}.
+          </p>
+        </Card>
       </ModuleSection>
 
-      {/* === Section 2: Was möglich ist === */}
+      {/* === Section 2: Restleistungsvermögen === */}
       <ModuleSection
         number={2}
-        title="Was BU-Schutz für dich kosten würde"
+        title="Wie viel kannst du noch — Restleistungsvermögen"
         intro={
           <>
-            Grobe Marktdurchschnitte für Hebammen in Risikoklasse {BU_ANNAHMEN.rechtsklasseHebamme}.
-            Konkrete Prämien hängen stark vom Gesundheitszustand ab — die echte Zahl gibt
-            es nur über eine Risikovoranfrage (anonym, ohne Antragspflicht).
+            Die gesetzliche Erwerbsminderungsrente unterscheidet nach Stunden, die du
+            täglich noch <em>irgendeiner</em> Erwerbstätigkeit nachgehen kannst —
+            nicht deinem Beruf. Das ist ein wichtiger Unterschied zur privaten BU.
           </>
         }
       >
-        <div className="grid gap-3 sm:grid-cols-3">
-          {referenzRenten.map((rente) => {
-            const sch = schaetzeBuPraemie({ alter: daten.alter, rente });
-            return (
-              <Card key={rente} className="text-center">
-                <p className="text-xs uppercase tracking-wide text-muted">
-                  {formatEuro(rente)}/Mon Rente
-                </p>
-                <p className="mt-2 font-serif text-3xl text-berry tabular-nums">
-                  {formatEuro(sch.mitte)}
-                </p>
-                <p className="mt-1 text-xs text-muted">/ Monat Prämie</p>
-                <p className="mt-3 text-[11px] text-muted">
-                  Spanne: {formatEuro(sch.unten)}–{formatEuro(sch.oben)}
-                </p>
-              </Card>
-            );
-          })}
-        </div>
+        <Card>
+          <Range
+            label="Restleistungsvermögen (Stunden / Tag)"
+            min={1}
+            max={6}
+            step={1}
+            value={restleistung}
+            onChange={setRestleistung}
+            formatValue={(v) => `${v} h/Tag`}
+          />
 
-        <Card className="mt-5 bg-cream-dark">
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <EmStufeBox
+              label="< 3 h/Tag"
+              prozent="34 %"
+              status="Volle EM"
+              active={phasen.emGrad === 'voll'}
+            />
+            <EmStufeBox
+              label="3–6 h/Tag"
+              prozent="17 %"
+              status="Halbe EM"
+              active={phasen.emGrad === 'halb'}
+            />
+            <EmStufeBox
+              label="≥ 6 h/Tag"
+              prozent="0 %"
+              status="Kein Anspruch"
+              active={phasen.emGrad === 'keine'}
+            />
+          </div>
+
+          <p className="mt-4 text-xs text-muted">
+            Schieb den Regler — die Headline und Phase 3 oben aktualisieren sich. Der Unterschied
+            zwischen privater BU und gesetzlicher EM-Rente: BU greift ab 50 % Berufsunfähigkeit
+            <strong> in deinem Beruf</strong>. EM-Rente greift erst, wenn du{' '}
+            <strong>irgendwas</strong> nicht mehr 6 h täglich kannst — viel strenger.
+          </p>
+        </Card>
+
+        <Card className="mt-5 border-danger/30 bg-danger/5">
           <div className="flex items-start gap-3">
-            <Heart className="mt-0.5 h-5 w-5 shrink-0 text-orange" />
-            <div className="text-sm text-ink/80">
-              <p className="font-medium text-ink">Ergänze, wenn möglich, Krankentagegeld</p>
-              <p className="mt-1">
-                BU greift erst bei 50 % dauerhafter Berufsunfähigkeit (i.d.R. ab Monat 6).
-                Krankentagegeld überbrückt die ersten Monate und schützt vor
-                Liquiditätslücken. Für freiberufliche Hebammen besonders relevant, weil
-                die Krankenkasse erst nach 6 Wochen Krankengeld zahlt — und das auch nur
-                bei freiwilligem KK-Status mit höherem Beitrag.
+            <TrendingDown className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+            <div className="text-sm">
+              <p className="font-medium text-ink">
+                Verlust gesamte Berufsunfähigkeit
+              </p>
+              <p className="mt-1 font-serif text-3xl text-danger tabular-nums">
+                {formatEuro(phasen.verlustBisRente)}
+              </p>
+              <p className="mt-1 text-ink/80">
+                Netto-Differenz pro Monat × Monate bis Renteneintritt — das ist die
+                Summe, die dir bei der gewählten EM-Stufe fehlt. Eine private BU schließt
+                genau diese Lücke.
               </p>
             </div>
           </div>
         </Card>
       </ModuleSection>
 
-      {/* === Section 3: Spiel mit deinen Zahlen === */}
+      {/* === Section 3: Spiel === */}
       <ModuleSection
         number={3}
-        title="Wie viel BU-Rente macht für dich Sinn?"
-        intro="Schieb den Regler — Prämie passt sich an. Die Schätzung gilt für dein Alter und gesunde Annahmen."
+        title="Was BU-Schutz für dich kosten würde"
+        intro={
+          <>
+            Grobe Marktdurchschnitte für Hebammen in Risikoklasse{' '}
+            {BU_ANNAHMEN.rechtsklasseHebamme}. Konkrete Prämien hängen stark vom
+            Gesundheitszustand ab — die echte Zahl gibt es nur über eine Risikovoranfrage.
+          </>
+        }
       >
         <Card>
           <Range
@@ -186,12 +171,6 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
             onChange={setWunschRente}
             formatValue={(v) => formatEuro(v) + '/Mon'}
           />
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-sm text-muted">Gewählt:</span>
-            <span className="font-serif text-2xl text-berry tabular-nums">
-              {formatEuro(wunschRente)}/Mon
-            </span>
-          </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <PraemieBox
@@ -213,18 +192,31 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
           </div>
 
           <p className="mt-4 text-xs text-muted">
-            Hinweis: Werte für Alter {schaetzungAktuell.fuerAlter} (gerundete Stützstelle).
-            Linearer Faktor je 500 € Mehrrente. Hebammen werden je nach Versicherer
-            unterschiedlich eingestuft — bis Faktor 1,5 zwischen den Anbietern realistisch.
+            Werte für Alter {schaetzungAktuell.fuerAlter} (gerundete Stützstelle). Hebammen werden
+            je nach Versicherer unterschiedlich eingestuft — bis Faktor 1,5 zwischen Anbietern
+            realistisch.
           </p>
+        </Card>
+
+        <Card className="mt-5 bg-cream-dark">
+          <div className="flex items-start gap-3">
+            <Heart className="mt-0.5 h-5 w-5 shrink-0 text-orange" />
+            <div className="text-sm text-ink/80">
+              <p className="font-medium text-ink">Ergänze Krankentagegeld — gerade als Freiberuflerin</p>
+              <p className="mt-1">
+                BU greift erst bei dauerhafter 50%iger Berufsunfähigkeit (i.d.R. ab Monat
+                6). Krankentagegeld überbrückt die ersten Monate. Für freiberufliche
+                Hebammen besonders relevant, weil die Kasse — wenn überhaupt — erst nach
+                6 Wochen Krankengeld zahlt. Tarife u.a. HanseMerkur, R+V (kurze Karenz ab
+                Tag 22 oder 43).
+              </p>
+            </div>
+          </div>
         </Card>
       </ModuleSection>
 
       {/* === Section 4: Nächste Schritte === */}
-      <ModuleSection
-        number={4}
-        title="Was du als nächstes tun kannst"
-      >
+      <ModuleSection number={4} title="Was du als nächstes tun kannst">
         <Checklist
           items={[
             {
@@ -255,10 +247,9 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
               title: 'Wartezeit nicht unterschätzen — je früher, je günstiger',
               detail: (
                 <>
-                  Jedes Jahr, das du wartest, kostet dich später spürbar mehr (siehe Tabelle
-                  oben). Wer mit 35 statt 40 abschließt, spart über Restlaufzeit{' '}
-                  <strong>5-stellig</strong>. Gesundheitliche Vorbelastungen können den
-                  Abschluss zudem unmöglich machen.
+                  Jedes Jahr, das du wartest, kostet dich später spürbar mehr. Wer mit 35
+                  statt 40 abschließt, spart über Restlaufzeit <strong>5-stellig</strong>.
+                  Gesundheitliche Vorbelastungen können den Abschluss zudem unmöglich machen.
                 </>
               ),
               effort: '—',
@@ -266,7 +257,7 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
             {
               title: 'Krankentagegeld dazu — gerade als Freiberuflerin',
               detail:
-                'BU zahlt erst ab dauerhafter Berufsunfähigkeit. Krankentagegeld deckt die ersten Monate. Speziell für Hebammen: HanseMerkur und R+V bieten Tarife mit kurzer Karenz (ab Tag 22 oder Tag 43).',
+                'BU zahlt erst ab dauerhafter Berufsunfähigkeit. Krankentagegeld deckt die ersten Monate. Speziell für Hebammen: HanseMerkur und R+V mit kurzer Karenz (ab Tag 22 oder Tag 43).',
               effort: 'mit der BU-Voranfrage kombinieren',
             },
           ]}
@@ -278,24 +269,30 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
         <SourcesBox
           items={[
             {
-              label: 'BU-Häufigkeit',
-              detail: 'GDV-Statistik: BU-Risiko Berufsklassen, Hebammen Klasse 3–4',
-              stand: BU_ANNAHMEN.letztePruefung,
+              label: 'Lohnfortzahlung',
+              detail: '§3 EFZG, 6 Wochen 100 % Brutto durch Arbeitgeber',
+              stand: '2026',
             },
             {
-              label: 'Berufswechsel-Quote',
-              detail: 'opta data Hebammenstudie 2025 — 43,6 % erwägen Wechsel',
-              stand: '2025',
-            },
-            {
-              label: 'Prämien-Tabelle',
+              label: 'Krankengeld',
               detail:
-                'Marktdurchschnitte aus öffentlichen Vergleichsrechnern, Endalter 67, gesund. ±40 % Streuung.',
-              stand: BU_ANNAHMEN.letztePruefung,
+                '§47 SGB V, max. 70 % Brutto / 90 % Netto, max. 72 Wo. innerhalb 3 Jahren',
+              stand: '2026',
             },
             {
-              label: 'Empfehlung 80 % vom Netto',
-              detail: 'Standard-Beratungsempfehlung BdV / Stiftung Warentest',
+              label: 'Erwerbsminderungsrente',
+              detail: '§43 SGB VI, Restleistungsvermögen-Stufen <3h / 3–6h / ≥6h',
+              stand: '2026',
+            },
+            {
+              label: 'BU-Faustformel 34 % / 17 %',
+              detail:
+                'Vereinfachte Annahme: 34 % Brutto bei voller EM, 17 % bei halber. Echte DRV-Rechnung läuft über Punkte × Rentenwert × Faktoren — die echte Zahl kommt aus deinem Rentenbescheid.',
+            },
+            {
+              label: 'BU-Häufigkeit Hebammen',
+              detail: 'GDV-Statistik Berufsklassen 3–4 · opta data 2025',
+              stand: BU_ANNAHMEN.letztePruefung,
             },
           ]}
         />
@@ -304,27 +301,106 @@ export function BuSchutzModul({ beratungId, daten }: BuSchutzModulProps) {
   );
 }
 
-function StatusCard({
+function PhasenCard({
+  phase,
+  nettoReferenz,
+}: {
+  phase: ReturnType<typeof calcEinkommensPhasen>['phasen'][number];
+  nettoReferenz: number;
+}) {
+  const tone =
+    phase.id === 'lohnfortzahlung'
+      ? phase.versorgungsluecke === 0
+        ? 'good'
+        : 'risk'
+      : phase.id === 'krankengeld'
+        ? 'medium'
+        : 'risk';
+
+  const toneStyles = {
+    good: {
+      header: 'bg-success/20 text-success',
+      body: 'border-success/40 bg-success/5',
+      value: 'text-success',
+    },
+    medium: {
+      header: 'bg-warning/30 text-orange-deep',
+      body: 'border-warning/40 bg-warning/10',
+      value: 'text-orange-deep',
+    },
+    risk: {
+      header: 'bg-danger/15 text-danger',
+      body: 'border-danger/40 bg-danger/5',
+      value: 'text-danger',
+    },
+  } as const;
+  const s = toneStyles[tone];
+
+  return (
+    <div className={`rounded-2xl border ${s.body} overflow-hidden`}>
+      <div className={`px-4 py-2 text-xs font-medium uppercase tracking-wide ${s.header}`}>
+        {phase.label}
+      </div>
+      <div className="p-4">
+        <p className="text-xs text-muted">Auszahlung netto</p>
+        <p className={`font-serif text-2xl tabular-nums ${s.value}`}>
+          {formatEuro(phase.nettoProMonat)}
+        </p>
+        {phase.versorgungsluecke > 0 && (
+          <>
+            <p className="mt-3 text-xs text-muted">Versorgungslücke</p>
+            <p className="font-serif text-lg text-danger tabular-nums">
+              − {formatEuro(phase.versorgungsluecke)}
+            </p>
+          </>
+        )}
+        <p className="mt-3 text-xs leading-relaxed text-ink/70">{phase.erklaerung}</p>
+        {/* Mini-Bar: Anteil vom Referenz-Netto */}
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-cream-dark">
+          <div
+            className={`h-full ${
+              tone === 'good'
+                ? 'bg-success'
+                : tone === 'medium'
+                  ? 'bg-warning'
+                  : 'bg-danger'
+            }`}
+            style={{
+              width: `${Math.max(0, Math.min(100, (phase.nettoProMonat / nettoReferenz) * 100))}%`,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmStufeBox({
   label,
-  value,
-  sublabel,
-  tone,
+  prozent,
+  status,
+  active,
 }: {
   label: string;
-  value: string;
-  sublabel: string;
-  tone: 'positive' | 'neutral' | 'risk';
+  prozent: string;
+  status: string;
+  active: boolean;
 }) {
-  const toneClasses = {
-    positive: 'border-green/40 bg-green/5',
-    neutral: 'border-rule bg-white',
-    risk: 'border-danger/40 bg-danger/5',
-  };
   return (
-    <div className={`rounded-2xl border p-5 ${toneClasses[tone]}`}>
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-2 font-serif text-2xl text-berry tabular-nums">{value}</p>
-      <p className="mt-1 text-sm text-ink/70">{sublabel}</p>
+    <div
+      className={`rounded-xl border p-3 text-center ${
+        active ? 'border-berry bg-berry/5' : 'border-rule bg-white'
+      }`}
+    >
+      <p className="text-xs text-muted">{label}</p>
+      <p
+        className={`mt-1 font-serif text-xl ${
+          active ? 'text-orange-deep' : 'text-berry'
+        }`}
+      >
+        {prozent}
+      </p>
+      <p className="mt-1 text-xs text-muted">{status}</p>
     </div>
   );
 }
@@ -359,5 +435,5 @@ function PraemieBox({
   );
 }
 
-// Damit das Icon-Import nicht stillschweigend stirbt, falls Lint strict ist.
-void Shield;
+// avoid unused-import warning
+void AlertCircle;
